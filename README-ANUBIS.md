@@ -91,6 +91,56 @@ conflicts. At 236k swaps/day the performance argument is real, so this is worth 
 deliberate, separately-tested change, not folded silently into a chain-config fork. A subtle ID bug
 produces silently wrong data rather than an error.
 
+## Deploying: do NOT use Subgraph Studio
+
+The Graph's own page for this chain states it plainly:
+
+> Anubis is supported on The Graph Network, but does not currently have Subgraph Studio
+> testing/staging support. Skip the standard `graph deploy` and Studio playground path.
+
+Studio's UI *does* offer Anubis in its network dropdown, and the networks registry maps
+`anubis -> api.studio.thegraph.com/deploy`, so `graph deploy` looks like it should work. It does
+not. The build and IPFS upload succeed and then the registrar refuses:
+
+    Could not deploy subgraph on graph-node:
+    network not supported by registrar: no network anubis found on chain ethereum
+
+Confirmed against graph-cli 0.64.1 and 0.98.1, with network identifiers `anubis`,
+`anubis-mainnet` and `evm-6714`, and with specVersion 0.0.8 and 1.2.0. It is the deploy path that
+is wrong, not the subgraph.
+
+**The supported path is `graph publish`** — publishing on-chain to The Graph Network, where an
+Indexer that supports Anubis picks it up:
+
+    graph codegen && graph build
+    graph publish
+
+Publishing opens a browser to connect a wallet and is an on-chain transaction. The
+`--protocol-network` flag refers to where The Graph's contracts live (Arbitrum One), not to Anubis.
+
+**Signal matters here.** Without curation signal no Indexer is incentivised to index the subgraph;
+at 500 GRT or more it is picked up automatically. Adding the signal during the publish transaction
+saves gas versus doing it separately. This is the practical consequence of Anubis having
+`issuanceRewards: false` — attention has to be bought rather than assumed.
+
+To validate before publishing, run a local Graph Node against the Anubis RPC rather than Studio:
+
+    environment:
+      ethereum: 'anubis:https://rpc.anubispace.org'
+
+    graph create --node http://localhost:8020/ rocket-swap
+    graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 rocket-swap
+
+## A privacy caveat that changes what the numbers mean
+
+Anubis is a **selective-privacy** chain. A subgraph can only index what is public on-chain:
+transparent transactions and the events they emit. Data inside shielded (PLONK ZK) transactions is
+not visible on-chain and therefore cannot be indexed at all.
+
+So volume and liquidity from this subgraph are *transparent-transaction* volume and liquidity, not
+necessarily all activity. That is the correct framing for a DEX API on this chain, and it should be
+stated wherever the figures are surfaced rather than left for a reader to assume.
+
 ## Before trusting the output
 
 - Run `{ _meta { block { number } } }` and compare against the chain head.
