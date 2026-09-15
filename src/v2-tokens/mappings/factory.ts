@@ -1,18 +1,18 @@
 /* eslint-disable prefer-const */
-import { BigInt, log } from '@graphprotocol/graph-ts'
+import { BigInt, Bytes, log } from '@graphprotocol/graph-ts'
 
 import { PairCreated } from '../../../generated/Factory/Factory'
 import { Bundle, Pair, PairTokenLookup, Token, UniswapFactory } from '../../../generated/schema'
 import { Pair as PairTemplate } from '../../../generated/templates'
 import { FACTORY_ADDRESS } from '../../common/chain'
-import { ZERO_BD, ZERO_BI } from '../../common/constants'
+import { BUNDLE_ID, FACTORY_ID, ZERO_BD, ZERO_BI } from '../../common/constants'
 import { fetchTokenDecimals, fetchTokenName, fetchTokenSymbol, fetchTokenTotalSupply } from '../../common/helpers'
 
 export function handleNewPair(event: PairCreated): void {
   // load factory (create if first exchange)
-  let factory = UniswapFactory.load(FACTORY_ADDRESS)
+  let factory = UniswapFactory.load(FACTORY_ID)
   if (!factory) {
-    factory = new UniswapFactory(FACTORY_ADDRESS)
+    factory = new UniswapFactory(FACTORY_ID)
     factory.pairCount = 0
     factory.totalVolumeETH = ZERO_BD
     factory.totalLiquidityETH = ZERO_BD
@@ -22,7 +22,7 @@ export function handleNewPair(event: PairCreated): void {
     factory.txCount = ZERO_BI
 
     // create new bundle
-    let bundle = new Bundle('1')
+    let bundle = new Bundle(BUNDLE_ID)
     bundle.ethPrice = ZERO_BD
     bundle.save()
   }
@@ -30,12 +30,12 @@ export function handleNewPair(event: PairCreated): void {
   factory.save()
 
   // create the tokens
-  let token0 = Token.load(event.params.token0.toHexString())
-  let token1 = Token.load(event.params.token1.toHexString())
+  let token0 = Token.load(event.params.token0)
+  let token1 = Token.load(event.params.token1)
 
   // fetch info if null
   if (!token0) {
-    token0 = new Token(event.params.token0.toHexString())
+    token0 = new Token(event.params.token0)
     token0.symbol = fetchTokenSymbol(event.params.token0)
     token0.name = fetchTokenName(event.params.token0)
     token0.totalSupply = fetchTokenTotalSupply(event.params.token0)
@@ -65,7 +65,7 @@ export function handleNewPair(event: PairCreated): void {
 
   // fetch info if null
   if (!token1) {
-    token1 = new Token(event.params.token1.toHexString())
+    token1 = new Token(event.params.token1)
     token1.symbol = fetchTokenSymbol(event.params.token1)
     token1.name = fetchTokenName(event.params.token1)
     token1.totalSupply = fetchTokenTotalSupply(event.params.token1)
@@ -91,7 +91,7 @@ export function handleNewPair(event: PairCreated): void {
     token1.txCount = ZERO_BI
   }
 
-  let pair = new Pair(event.params.pair.toHexString()) as Pair
+  let pair = new Pair(event.params.pair) as Pair
   pair.token0 = token0.id
   pair.token1 = token1.id
   pair.liquidityProviderCount = ZERO_BI
@@ -116,13 +116,13 @@ export function handleNewPair(event: PairCreated): void {
   factory.save()
 
   let pairLookup0 = new PairTokenLookup(
-    event.params.token0.toHexString().concat('-').concat(event.params.token1.toHexString())
+    event.params.token0.concat(event.params.token1)
   )
   pairLookup0.pair = pair.id
   pairLookup0.save()
 
   let pairLookup1 = new PairTokenLookup(
-    event.params.token1.toHexString().concat('-').concat(event.params.token0.toHexString())
+    event.params.token1.concat(event.params.token0)
   )
   pairLookup1.pair = pair.id
   pairLookup1.save()

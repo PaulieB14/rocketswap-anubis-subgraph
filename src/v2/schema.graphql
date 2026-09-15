@@ -1,6 +1,6 @@
 type UniswapFactory @entity(immutable: false) {
   # factory address
-  id: ID!
+  id: Bytes!
 
   # pair info
   pairCount: Int!
@@ -22,7 +22,7 @@ type UniswapFactory @entity(immutable: false) {
 
 type Token @entity(immutable: false) {
   # token address
-  id: ID!
+  id: Bytes!
 
   # mirrored from the smart contract
   symbol: String!
@@ -56,7 +56,7 @@ type Token @entity(immutable: false) {
 
 type Pair @entity(immutable: false) {
   # pair address
-  id: ID!
+  id: Bytes!
 
   # mirrored from the smart contract
   token0: Token!
@@ -96,12 +96,12 @@ type Pair @entity(immutable: false) {
 }
 
 type User @entity(immutable: false) {
-  id: ID!
+  id: Bytes!
   # usdSwapped: BigDecimal!
 }
 
 type Transaction @entity(immutable: false) {
-  id: ID! # txn hash
+  id: Bytes! # txn hash
   blockNumber: BigInt!
   timestamp: BigInt!
   # This is not the reverse of Mint.transaction; it is only used to
@@ -113,7 +113,7 @@ type Transaction @entity(immutable: false) {
 
 type Mint @entity(immutable: false) {
   # transaction hash + "-" + index in mints Transaction array
-  id: ID!
+  id: Bytes!
   transaction: Transaction!
   timestamp: BigInt! # need this to pull recent txns for specific token or pair
   pair: Pair!
@@ -137,7 +137,7 @@ type Mint @entity(immutable: false) {
 
 type Burn @entity(immutable: false) {
   # transaction hash + "-" + index in mints Transaction array
-  id: ID!
+  id: Bytes!
   transaction: Transaction!
   timestamp: BigInt! # need this to pull recent txns for specific token or pair
   pair: Pair!
@@ -164,7 +164,7 @@ type Burn @entity(immutable: false) {
 
 type Swap @entity(immutable: true) {
   # transaction hash + "-" + index in swaps Transaction array
-  id: ID!
+  id: Bytes!
   transaction: Transaction!
   timestamp: BigInt! # need this to pull recent txns for specific token or pair
   pair: Pair!
@@ -185,13 +185,13 @@ type Swap @entity(immutable: true) {
 
 # stores for USD calculations
 type Bundle @entity(immutable: false) {
-  id: ID!
+  id: Bytes!
   ethPrice: BigDecimal! # price of ETH usd
 }
 
 # Data accumulated and condensed into day stats for all of Uniswap
 type UniswapDayData @entity(immutable: false) {
-  id: ID! # timestamp rounded to current day by dividing by 86400
+  id: Bytes! # timestamp rounded to current day by dividing by 86400
   date: Int!
 
   dailyVolumeETH: BigDecimal!
@@ -207,7 +207,7 @@ type UniswapDayData @entity(immutable: false) {
 }
 
 type PairHourData @entity(immutable: false) {
-  id: ID!
+  id: Bytes!
   hourStartUnix: Int! # unix timestamp for start of hour
   pair: Pair!
 
@@ -230,7 +230,7 @@ type PairHourData @entity(immutable: false) {
 
 # Data accumulated and condensed into day stats for each exchange
 type PairDayData @entity(immutable: false) {
-  id: ID!
+  id: Bytes!
   date: Int!
   pairAddress: Bytes!
   token0: Token!
@@ -254,7 +254,7 @@ type PairDayData @entity(immutable: false) {
 }
 
 type TokenDayData @entity(immutable: false) {
-  id: ID!
+  id: Bytes!
   date: Int!
   token: Token!
 
@@ -275,7 +275,7 @@ type TokenDayData @entity(immutable: false) {
 
 type TokenHourData @entity(immutable: false) {
   # token address concatendated with date
-  id: ID!
+  id: Bytes!
   # unix timestamp for start of hour
   periodStartUnix: Int!
   # pointer to token
@@ -307,6 +307,6 @@ type TokenHourData @entity(immutable: false) {
 }
 
 type PairTokenLookup @entity(immutable: true) {
-  id: ID!
+  id: Bytes!
   pair: Pair!
 }

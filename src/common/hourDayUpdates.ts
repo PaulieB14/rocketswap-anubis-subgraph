@@ -1,5 +1,5 @@
 /* eslint-disable prefer-const */
-import { BigDecimal, BigInt, ethereum, store } from '@graphprotocol/graph-ts'
+import { BigDecimal, BigInt, Bytes, ethereum, store } from '@graphprotocol/graph-ts'
 
 import {
   Bundle,
@@ -13,16 +13,16 @@ import {
 } from '../../generated/schema'
 import { PairHourData } from '../../generated/schema'
 import { FACTORY_ADDRESS } from './chain'
-import { ONE_BI, ZERO_BD, ZERO_BI } from './constants'
+import { BUNDLE_ID, FACTORY_ID, ONE_BI, ZERO_BD, ZERO_BI } from './constants'
 
 export function updateUniswapDayData(event: ethereum.Event): UniswapDayData {
-  let uniswap = UniswapFactory.load(FACTORY_ADDRESS)!
+  let uniswap = UniswapFactory.load(FACTORY_ID)!
   let timestamp = event.block.timestamp.toI32()
   let dayID = timestamp / 86400
   let dayStartTimestamp = dayID * 86400
-  let uniswapDayData = UniswapDayData.load(dayID.toString())
+  let uniswapDayData = UniswapDayData.load(Bytes.fromI32(dayID))
   if (!uniswapDayData) {
-    uniswapDayData = new UniswapDayData(dayID.toString())
+    uniswapDayData = new UniswapDayData(Bytes.fromI32(dayID))
     uniswapDayData.date = dayStartTimestamp
     uniswapDayData.dailyVolumeUSD = ZERO_BD
     uniswapDayData.dailyVolumeETH = ZERO_BD
@@ -43,7 +43,7 @@ export function updatePairDayData(pair: Pair, event: ethereum.Event): PairDayDat
   let timestamp = event.block.timestamp.toI32()
   let dayID = timestamp / 86400
   let dayStartTimestamp = dayID * 86400
-  let dayPairID = event.address.toHexString().concat('-').concat(BigInt.fromI32(dayID).toString())
+  let dayPairID = event.address.concatI32(dayID)
   let pairDayData = PairDayData.load(dayPairID)
   if (!pairDayData) {
     pairDayData = new PairDayData(dayPairID)
@@ -71,12 +71,12 @@ export function updatePairHourData(pair: Pair, event: ethereum.Event): PairHourD
   let timestamp = event.block.timestamp.toI32()
   let hourIndex = timestamp / 3600 // get unique hour within unix history
   let hourStartUnix = hourIndex * 3600 // want the rounded effect
-  let hourPairID = event.address.toHexString().concat('-').concat(BigInt.fromI32(hourIndex).toString())
+  let hourPairID = event.address.concatI32(hourIndex)
   let pairHourData = PairHourData.load(hourPairID)
   if (!pairHourData) {
     pairHourData = new PairHourData(hourPairID)
     pairHourData.hourStartUnix = hourStartUnix
-    pairHourData.pair = event.address.toHexString()
+    pairHourData.pair = event.address
     pairHourData.hourlyVolumeToken0 = ZERO_BD
     pairHourData.hourlyVolumeToken1 = ZERO_BD
     pairHourData.hourlyVolumeUSD = ZERO_BD
@@ -94,11 +94,11 @@ export function updatePairHourData(pair: Pair, event: ethereum.Event): PairHourD
 }
 
 export function updateTokenDayData(token: Token, event: ethereum.Event): TokenDayData {
-  let bundle = Bundle.load('1')!
+  let bundle = Bundle.load(BUNDLE_ID)!
   let timestamp = event.block.timestamp.toI32()
   let dayID = timestamp / 86400
   let dayStartTimestamp = dayID * 86400
-  let tokenDayID = token.id.toString().concat('-').concat(BigInt.fromI32(dayID).toString())
+  let tokenDayID = token.id.concatI32(dayID)
 
   let tokenDayData = TokenDayData.load(tokenDayID)
   if (!tokenDayData) {
@@ -129,11 +129,11 @@ export function updateTokenDayData(token: Token, event: ethereum.Event): TokenDa
 }
 
 export function updateTokenHourData(token: Token, event: ethereum.Event): TokenHourData {
-  let bundle = Bundle.load('1')!
+  let bundle = Bundle.load(BUNDLE_ID)!
   let timestamp = event.block.timestamp.toI32()
   let hourIndex = timestamp / 3600 // get unique hour within unix history
   let hourStartUnix = hourIndex * 3600 // want the rounded effect
-  let tokenHourID = token.id.concat('-').concat(hourIndex.toString())
+  let tokenHourID = token.id.concatI32(hourIndex)
   let tokenHourData = TokenHourData.load(tokenHourID)
   let tokenPrice = token.derivedETH.times(bundle.ethPrice)
   let isNew = false
@@ -197,10 +197,10 @@ function archiveHourData(token: Token, end: i32): void {
     if (array[i] > end) {
       break
     }
-    let tokenHourID = token.id.concat('-').concat(array[i].toString())
+    let tokenHourID = token.id.concatI32(array[i])
     // let tokenMinuteData = TokenMinuteData.load(tokenMinuteID)
     // if (tokenMinuteData) {
-    store.remove('TokenHourData', tokenHourID)
+    store.remove('TokenHourData', tokenHourID.toHexString())
     // }
     modArray.shift()
     last = array[i]

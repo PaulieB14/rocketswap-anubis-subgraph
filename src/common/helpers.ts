@@ -1,5 +1,5 @@
 /* eslint-disable prefer-const */
-import { Address, BigDecimal, BigInt } from '@graphprotocol/graph-ts'
+import { Address, BigDecimal, BigInt, Bytes } from '@graphprotocol/graph-ts'
 
 import { ERC20 } from '../../generated/Factory/ERC20'
 import { ERC20BigDecimals } from '../../generated/Factory/ERC20BigDecimals'
@@ -142,9 +142,9 @@ export function fetchTokenDecimals(tokenAddress: Address): BigInt | null {
 }
 
 export function createUser(address: Address): void {
-  let user = User.load(address.toHexString())
+  let user = User.load(address)
   if (!user) {
-    user = new User(address.toHexString())
+    user = new User(address)
     user.save()
   }
 }

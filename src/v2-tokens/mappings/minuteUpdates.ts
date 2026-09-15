@@ -1,14 +1,14 @@
-import { BigDecimal, BigInt, ethereum, store } from '@graphprotocol/graph-ts'
+import { BigDecimal, BigInt, Bytes, ethereum, store } from '@graphprotocol/graph-ts'
 
 import { Bundle, Token, TokenMinuteData } from '../../../generated/schema'
-import { ZERO_BD, ZERO_BI } from '../../common/constants'
+import { BUNDLE_ID, ZERO_BD, ZERO_BI } from '../../common/constants'
 
 export function updateTokenMinuteData(token: Token, event: ethereum.Event): TokenMinuteData {
-  const bundle = Bundle.load('1')!
+  const bundle = Bundle.load(BUNDLE_ID)!
   const timestamp = event.block.timestamp.toI32()
   const minuteIndex = timestamp / 60 // get unique hour within unix history
   const minuteStartUnix = minuteIndex * 60 // want the rounded effect
-  const tokenMinuteID = token.id.concat('-').concat(minuteIndex.toString())
+  const tokenMinuteID = token.id.concatI32(minuteIndex)
   let tokenMinuteData = TokenMinuteData.load(tokenMinuteID)
   const tokenPrice = token.derivedETH.times(bundle.ethPrice)
   let isNew = false
@@ -77,10 +77,10 @@ function archiveMinuteData(token: Token, end: i32): void {
     if (array[i] > end) {
       break
     }
-    const tokenMinuteID = token.id.concat('-').concat(array[i].toString())
+    const tokenMinuteID = token.id.concatI32(array[i])
     // let tokenMinuteData = TokenMinuteData.load(tokenMinuteID)
     // if (tokenMinuteData) {
-    store.remove('TokenMinuteData', tokenMinuteID)
+    store.remove('TokenMinuteData', tokenMinuteID.toHexString())
     // }
     modArray.shift()
     last = array[i]
