@@ -1,0 +1,8 @@
+node_modules/
+build/
+generated/
+src/common/chain.ts
+v2-subgraph.yaml
+v2-tokens-subgraph.yaml
+.env
+.subgraph-env

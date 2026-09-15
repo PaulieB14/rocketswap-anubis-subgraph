@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          token: ${{ secrets.github_token }}
+          persist-credentials: false
+
+      - name: Set up node
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v3
+        with:
+          node-version: "18.x"
+          registry-url: https://registry.npmjs.org
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
+        id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            yarn-
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Lint
+        run: yarn run lint
+
+      - name: Commit lint fixes
+        if: github.event_name == 'pull_request'
+        run: |
+          git config --global user.name "${GITHUB_EVENT_PULL_REQUEST_USER_LOGIN}"
+          git config --global user.email "${GITHUB_EVENT_PULL_REQUEST_USER_LOGIN}@users.noreply.github.com"
+          if [ -z "$(git diff)" ]; then exit; fi
+          git commit -a -m "fix(lint): auto-fix [ci]"
+          git push
+        env:
+          GITHUB_EVENT_PULL_REQUEST_USER_LOGIN: ${{ github.event.pull_request.user.login }}
