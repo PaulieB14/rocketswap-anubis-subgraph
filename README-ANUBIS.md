@@ -84,12 +84,25 @@ implementation creates them in `handleTransfer` and completes them later in `han
 `handleBurn` (hence `mint.save()` at both core.ts:84 and core.ts:322). Marking them immutable would
 break that two-phase pattern.
 
-**Bytes as IDs — not applied, deliberately.** Upstream uses `ID!` strings throughout. Converting
-would touch ~86 id-related lines across 34 `toHexString()` call sites and 14 entity reference
-fields, and would permanently diverge this fork from upstream so that every future Uniswap fix
-conflicts. At 236k swaps/day the performance argument is real, so this is worth doing — but as a
-deliberate, separately-tested change, not folded silently into a chain-config fork. A subtle ID bug
-produces silently wrong data rather than an error.
+**Bytes as IDs — applied.** Every live entity in both schemas now keys on `Bytes!` rather than
+`ID!`: 15 entities in v2, 12 in v2-tokens. Address and tx-hash ids drop the `.toHexString()` round
+trip, and composite ids move from string concatenation to `Bytes`, so `hash-index` becomes
+`hash.concatI32(index)` and `address-dayId` becomes `address.concatI32(dayId)`.
+
+`chain.ts` keeps its addresses as readable lowercase hex strings. Conversion happens once, in
+constants (`FACTORY_ID`, `BUNDLE_ID`), and comparisons against the string
+`WHITELIST` / `STABLECOINS` / `REFERENCE_TOKEN` config go the other way via
+`token.id.toHexString()`. Two places keep a string deliberately: `store.remove()` takes a string
+entity id, and `ADDRESS_ZERO` is compared against values rather than ids.
+
+This diverges the fork from upstream, so future Uniswap changes to the mappings will conflict here.
+That is the accepted cost at ~236k swaps/day.
+
+Worth knowing if you touch it: `src/common` is shared between the v2 and v2-tokens subgraphs, so
+converting only one schema breaks the other's build with type errors in the shared pricing code —
+both must move together. And `generated/` is rewritten per target, so `graph codegen` must precede
+each `graph build` when switching between them; building v2 straight after a v2-tokens codegen
+fails with missing `Mint`/`Burn`/`Swap` exports, which is build order rather than a code fault.
 
 ## Deploying: do NOT use Subgraph Studio
 
@@ -147,8 +160,9 @@ stated wherever the figures are surfaced rather than left for a reader to assume
 - Do **not** `orderBy: reserveUSD`. On Uniswap-V2-schema subgraphs that ranking surfaces untracked
   pairs reporting absurd USD values (~8.8e33 observed elsewhere) against zero volume. Rank by
   `trackedReserveETH`; `reserveUSD` is fine to read on an already-selected pair.
-- Anubis has `issuanceRewards: false` in The Graph's networks registry. Subgraphs deploy via Studio,
-  but indexers have no protocol incentive to serve it — plan on self-hosting or arranging indexing.
+- Anubis has `issuanceRewards: false` in The Graph's networks registry, and no Subgraph Studio
+  support — see the deploy section above. Publishing on-chain with curation signal is the route to
+  getting it indexed.
 
 ## A second factory exists
 
