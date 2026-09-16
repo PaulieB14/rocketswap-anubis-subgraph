@@ -1,10 +1,10 @@
 /* eslint-disable prefer-const */
-import { BigDecimal } from '@graphprotocol/graph-ts'
+import { BigDecimal, Bytes } from '@graphprotocol/graph-ts'
 
 import { Bundle, Pair, Token, UniswapFactory } from '../../../generated/schema'
 import { Swap, Sync } from '../../../generated/templates/Pair/Pair'
 import { FACTORY_ADDRESS } from '../../common/chain'
-import { ALMOST_ZERO_BD, ONE_BI, ZERO_BD } from '../../common/constants'
+import { ALMOST_ZERO_BD, BUNDLE_ID, FACTORY_ID, ONE_BI, ZERO_BD } from '../../common/constants'
 import { convertTokenToDecimal } from '../../common/helpers'
 import {
   updatePairDayData,
@@ -17,7 +17,7 @@ import { findEthPerToken, getEthPriceInUSD, getTrackedLiquidityUSD, getTrackedVo
 import { updateTokenMinuteData } from './minuteUpdates'
 
 export function handleSync(event: Sync): void {
-  let pair = Pair.load(event.address.toHexString())
+  let pair = Pair.load(event.address)
   if (!pair) {
     return
   }
@@ -26,7 +26,7 @@ export function handleSync(event: Sync): void {
   if (!token0 || !token1) {
     return
   }
-  let uniswap = UniswapFactory.load(FACTORY_ADDRESS)
+  let uniswap = UniswapFactory.load(FACTORY_ID)
   if (!uniswap) {
     return
   }
@@ -49,9 +49,9 @@ export function handleSync(event: Sync): void {
   pair.save()
 
   // update ETH price now that reserves could have changed
-  let bundle = Bundle.load('1')
+  let bundle = Bundle.load(BUNDLE_ID)
   if (!bundle) {
-    bundle = new Bundle('1')
+    bundle = new Bundle(BUNDLE_ID)
   }
   bundle.ethPrice = getEthPriceInUSD()
   bundle.save()
@@ -118,7 +118,7 @@ export function handleSync(event: Sync): void {
 }
 
 export function handleSwap(event: Swap): void {
-  let pair = Pair.load(event.address.toHexString())
+  let pair = Pair.load(event.address)
   if (!pair) {
     return
   }
@@ -137,7 +137,7 @@ export function handleSwap(event: Swap): void {
   let amount1Total = amount1Out.plus(amount1In)
 
   // ETH/USD prices
-  let bundle = Bundle.load('1')
+  let bundle = Bundle.load(BUNDLE_ID)
   if (!bundle) {
     return
   }
@@ -188,7 +188,7 @@ export function handleSwap(event: Swap): void {
   pair.save()
 
   // update global values, only used tracked amounts for volume
-  let uniswap = UniswapFactory.load(FACTORY_ADDRESS)
+  let uniswap = UniswapFactory.load(FACTORY_ID)
   if (!uniswap) {
     return
   }

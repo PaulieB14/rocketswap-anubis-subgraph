@@ -1,6 +1,6 @@
 specVersion: 0.0.8
-description: Uniswap is a decentralized protocol for automated token exchange on Ethereum.
-repository: https://github.com/Uniswap/uniswap-v2-subgraph
+description: RocketSwap on Anubis Mainnet — a Uniswap V2 fork. Indexes pairs, swaps, mints, burns, reserves and volume, with USD pricing anchored to DAI. Anubis is a selective-privacy chain, so only transparent transactions and the events they emit are indexable.
+repository: https://github.com/PaulieB14/rocketswap-anubis-subgraph
 schema:
   file: ./src/v2/schema.graphql
 dataSources:
