@@ -2,58 +2,61 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
-  lint:
-    name: lint
+  build:
+    name: build both subgraph targets
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out Git repository
-        uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
+      - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref || '' }}
-          token: ${{ secrets.github_token }}
           persist-credentials: false
 
-      - name: Set up node
-        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v3
+      - uses: actions/setup-node@v4
         with:
-          node-version: "18.x"
-          registry-url: https://registry.npmjs.org
+          node-version: "20.x"
+          cache: npm
 
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
+      # --legacy-peer-deps is required: upstream pins @typescript-eslint 2.x against
+      # eslint 8, which npm refuses to resolve. The conflict is inherited, not ours.
+      - name: Install
+        run: npm install --legacy-peer-deps --no-audit --no-fund
 
-      - uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
-        id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
-        with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            yarn-
-
-      - name: Install dependencies
-        run: yarn install
-
-      - name: Lint
-        run: yarn run lint
-
-      - name: Commit lint fixes
-        if: github.event_name == 'pull_request'
+      # Both targets are built because src/common is SHARED between them. Changing
+      # one schema without the other compiles fine for the target you are looking at
+      # and breaks the other with type errors in the shared pricing code. Building
+      # only v2 would not have caught the Bytes-as-IDs conversion breaking v2-tokens.
+      #
+      # codegen runs before each build on purpose: generated/ is rewritten per target,
+      # so building v2 straight after a v2-tokens codegen fails with missing
+      # Mint/Burn/Swap exports.
+      - name: Build v2
         run: |
-          git config --global user.name "${GITHUB_EVENT_PULL_REQUEST_USER_LOGIN}"
-          git config --global user.email "${GITHUB_EVENT_PULL_REQUEST_USER_LOGIN}@users.noreply.github.com"
-          if [ -z "$(git diff)" ]; then exit; fi
-          git commit -a -m "fix(lint): auto-fix [ci]"
-          git push
-        env:
-          GITHUB_EVENT_PULL_REQUEST_USER_LOGIN: ${{ github.event.pull_request.user.login }}
+          npx mustache config/anubis/config.json v2-subgraph.template.yaml > v2-subgraph.yaml
+          npx graph codegen v2-subgraph.yaml
+          npx graph build v2-subgraph.yaml
+
+      - name: Build v2-tokens
+        run: |
+          npx mustache config/anubis/config.json v2-tokens-subgraph.template.yaml > v2-tokens-subgraph.yaml
+          npx graph codegen v2-tokens-subgraph.yaml
+          npx graph build v2-tokens-subgraph.yaml
+
+      # The whole point of the Bytes-as-IDs work. A String id sneaking back into
+      # either schema should fail the build rather than be noticed months later.
+      - name: Assert every entity id is Bytes
+        run: |
+          for f in src/v2/schema.graphql src/v2-tokens/schema.graphql; do
+            if grep -E '^\s+id: ID!' "$f"; then
+              echo "::error file=$f::entity id must be Bytes!, not ID! — see the Bytes-as-IDs section in README.md"
+              exit 1
+            fi
+          done
+          echo "all entity ids are Bytes in both schemas"
