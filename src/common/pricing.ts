@@ -3,14 +3,17 @@ import { Address, BigDecimal, BigInt, Bytes } from '@graphprotocol/graph-ts/inde
 
 import { Bundle, Pair, PairTokenLookup, Token } from '../../generated/schema'
 import {
+  MAX_REFERENCE_PRICE_DEVIATION,
   MINIMUM_LIQUIDITY_THRESHOLD_ETH,
+  MINIMUM_STABLE_PAIR_REFERENCE_RESERVE,
   MINIMUM_USD_THRESHOLD_NEW_PAIRS,
+  REFERENCE_PRICE_FALLBACK,
   REFERENCE_TOKEN,
   STABLE_TOKEN_PAIRS,
   STABLECOINS,
   WHITELIST,
 } from './chain'
-import { ADDRESS_ZERO, BUNDLE_ID, ONE_BD, ZERO_BD } from './constants'
+import { ADDRESS_ZERO, BUNDLE_ID, ONE_BD, TWO_BD, ZERO_BD } from './constants'
 
 export function getEthPriceInUSD(): BigDecimal {
   // On chains where the reference token is itself a USD stablecoin (e.g. Arc, whose native gas
@@ -19,36 +22,41 @@ export function getEthPriceInUSD(): BigDecimal {
   if (STABLE_TOKEN_PAIRS.includes(REFERENCE_TOKEN)) {
     return ONE_BD
   }
-  // create an array with same length as STABLE_TOKEN_PAIRS
-  let stableTokenPairs = new Array<Pair | null>(STABLE_TOKEN_PAIRS.length)
-  let stableTokenReserves = new Array<BigDecimal>(STABLE_TOKEN_PAIRS.length)
-  let stableTokenPrices = new Array<BigDecimal>(STABLE_TOKEN_PAIRS.length)
-  let stableTokenIsToken0 = new Array<boolean>(STABLE_TOKEN_PAIRS.length)
-  let totalLiquidityETH = ZERO_BD
+
+  // Reserve-weighted average of the reference token's price across the stable pairs, counting
+  // only pairs that are deep enough and quote a sane price. Without these guards a single
+  // drained pair sets the price on its own: on Anubis, DAI/USDT at 6.9e-14 DAI vs 10.9 USDT
+  // priced DAI at ~$1.58e14 and produced 2.64e18 of fake volume (see config/anubis/chain.ts).
+  let totalReferenceReserve = ZERO_BD
+  let weightedPrice = ZERO_BD
   for (let i = 0; i < STABLE_TOKEN_PAIRS.length; i++) {
     const stableTokenPair = Pair.load(Bytes.fromHexString(STABLE_TOKEN_PAIRS[i]))
-    if (stableTokenPair) {
-      stableTokenIsToken0[i] = stableTokenPair.token1.toHexString() == REFERENCE_TOKEN
-      if (stableTokenIsToken0[i]) {
-        stableTokenReserves[i] = stableTokenPair.reserve1
-        stableTokenPrices[i] = stableTokenPair.token0Price
-        totalLiquidityETH = totalLiquidityETH.plus(stableTokenPair.reserve1)
-      } else {
-        stableTokenReserves[i] = stableTokenPair.reserve0
-        stableTokenPrices[i] = stableTokenPair.token1Price
-        totalLiquidityETH = totalLiquidityETH.plus(stableTokenPair.reserve0)
+    if (stableTokenPair === null) {
+      continue
+    }
+    // referenceIsToken1: the stable is token0, so the reference reserve is reserve1 and the
+    // reference token's price in the stable is token0Price (= reserve0 / reserve1).
+    const referenceIsToken1 = stableTokenPair.token1.toHexString() == REFERENCE_TOKEN
+    const referenceReserve = referenceIsToken1 ? stableTokenPair.reserve1 : stableTokenPair.reserve0
+    const price = referenceIsToken1 ? stableTokenPair.token0Price : stableTokenPair.token1Price
+
+    if (referenceReserve.le(ZERO_BD) || referenceReserve.lt(MINIMUM_STABLE_PAIR_REFERENCE_RESERVE)) {
+      continue
+    }
+    if (MAX_REFERENCE_PRICE_DEVIATION.gt(ZERO_BD)) {
+      const deviation = price.minus(ONE_BD)
+      if (deviation.gt(MAX_REFERENCE_PRICE_DEVIATION) || deviation.lt(ZERO_BD.minus(MAX_REFERENCE_PRICE_DEVIATION))) {
+        continue
       }
     }
-    stableTokenPairs[i] = stableTokenPair
+    totalReferenceReserve = totalReferenceReserve.plus(referenceReserve)
+    weightedPrice = weightedPrice.plus(price.times(referenceReserve))
   }
 
-  let tokenPrice = BigDecimal.fromString('0')
-  for (let i = 0; i < STABLE_TOKEN_PAIRS.length; i++) {
-    if (stableTokenPairs[i] !== null) {
-      tokenPrice = tokenPrice.plus(stableTokenPrices[i].times(safeDiv(stableTokenReserves[i], totalLiquidityETH)))
-    }
+  if (totalReferenceReserve.equals(ZERO_BD)) {
+    return REFERENCE_PRICE_FALLBACK
   }
-  return tokenPrice
+  return weightedPrice.div(totalReferenceReserve)
 }
 
 // return 0 if denominator is 0 in division
@@ -82,15 +90,25 @@ export function findEthPerToken(token: Token): BigDecimal {
       if (pairId.toHexString() != ADDRESS_ZERO) {
         let pair = Pair.load(pairId)
         if (pair) {
-          if (pair.token0.equals(token.id) && pair.reserveETH.gt(MINIMUM_LIQUIDITY_THRESHOLD_ETH)) {
+          // The liquidity guard counts only the whitelisted (pricing) side, doubled. pair.reserveETH
+          // also includes the token being priced at its own previous derivedETH, so a token whose
+          // price had already been inflated could pass the threshold on the strength of that
+          // inflation. This is the Uniswap v3 convention (ETH locked on the whitelisted side).
+          if (pair.token0.equals(token.id)) {
             let token1 = Token.load(pair.token1)
-            if (token1) {
+            if (
+              token1 &&
+              pair.reserve1.times(token1.derivedETH).times(TWO_BD).gt(MINIMUM_LIQUIDITY_THRESHOLD_ETH)
+            ) {
               return pair.token1Price.times(token1.derivedETH as BigDecimal) // return token1 per our token * Eth per token 1
             }
           }
-          if (pair.token1.equals(token.id) && pair.reserveETH.gt(MINIMUM_LIQUIDITY_THRESHOLD_ETH)) {
+          if (pair.token1.equals(token.id)) {
             let token0 = Token.load(pair.token0)
-            if (token0) {
+            if (
+              token0 &&
+              pair.reserve0.times(token0.derivedETH).times(TWO_BD).gt(MINIMUM_LIQUIDITY_THRESHOLD_ETH)
+            ) {
               return pair.token0Price.times(token0.derivedETH as BigDecimal) // return token0 per our token * ETH per token 0
             }
           }
@@ -204,17 +222,17 @@ export function getTokenTrackedLiquidityUSD(
   let price1 = companionToken.derivedETH.times(bundle.ethPrice)
 
   // both are whitelist tokens, take average of both amounts
-  if (WHITELIST.includes(tokenForPricing.id) && WHITELIST.includes(companionToken.id)) {
+  if (WHITELIST.includes(tokenForPricing.id.toHexString()) && WHITELIST.includes(companionToken.id.toHexString())) {
     return tokenForPricingAmount.times(price0)
   }
 
   // take double value of the whitelisted token amount
-  if (WHITELIST.includes(tokenForPricing.id) && !WHITELIST.includes(companionToken.id)) {
+  if (WHITELIST.includes(tokenForPricing.id.toHexString()) && !WHITELIST.includes(companionToken.id.toHexString())) {
     return tokenForPricingAmount.times(price0)
   }
 
   // take double value of the whitelisted token amount
-  if (!WHITELIST.includes(tokenForPricing.id) && WHITELIST.includes(companionToken.id)) {
+  if (!WHITELIST.includes(tokenForPricing.id.toHexString()) && WHITELIST.includes(companionToken.id.toHexString())) {
     return companionTokenAmount.times(price1)
   }
 

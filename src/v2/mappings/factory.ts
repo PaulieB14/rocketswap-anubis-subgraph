@@ -25,7 +25,10 @@ export function handleNewPair(event: PairCreated): void {
     bundle.ethPrice = ZERO_BD
     bundle.save()
   }
-  factory.pairCount = factory.pairCount + 1
+  // pairCount is incremented only once the Pair entity is actually created (below). Upstream
+  // incremented it here, before the decimals() bail-outs, so a pair whose token has no
+  // decimals() was counted but never indexed. On Anubis that is pair #548
+  // 0x4c41a3a0cb3939adbe87b76e2fcbaaf1cbae81e1, whose token1 is a non-contract address.
   factory.save()
 
   // create the tokens
@@ -97,6 +100,8 @@ export function handleNewPair(event: PairCreated): void {
   pair.untrackedVolumeUSD = ZERO_BD
   pair.token0Price = ZERO_BD
   pair.token1Price = ZERO_BD
+
+  factory.pairCount = factory.pairCount + 1
 
   // create the tracked contract based on the template
   PairTemplate.create(event.params.pair)

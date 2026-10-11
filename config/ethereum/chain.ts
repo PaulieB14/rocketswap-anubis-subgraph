@@ -89,3 +89,10 @@ export const STATIC_TOKEN_DEFINITIONS: TokenDefinition[] = [
 ]
 
 export const SKIP_TOTAL_SUPPLY: string[] = ['0x0000000000bf2686748e1c0255036e7617e7e8a5']
+
+// Reference-price guards (see config/anubis/chain.ts for why they exist).
+// Defaults here keep the original upstream behaviour: no minimum, no band, and
+// an unpriced (0) reference token when no stable pair is usable.
+export const MINIMUM_STABLE_PAIR_REFERENCE_RESERVE = BigDecimal.fromString('0')
+export const MAX_REFERENCE_PRICE_DEVIATION = BigDecimal.fromString('0')
+export const REFERENCE_PRICE_FALLBACK = BigDecimal.fromString('0')
