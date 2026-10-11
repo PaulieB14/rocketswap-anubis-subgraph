@@ -84,6 +84,31 @@ export const MINIMUM_USD_THRESHOLD_NEW_PAIRS = BigDecimal.fromString('10000')
 
 export const MINIMUM_LIQUIDITY_THRESHOLD_ETH = BigDecimal.fromString('2000')
 
+// ── Reference-price guards ───────────────────────────────────────────────────
+//
+// Added after the 2026-04-27 blow-up. At block 1,733,668 the DAI/USDT pair, then
+// the ONLY stable pair (DAI/USDC was created later, at block 2,467,181), had been
+// drained to 69,020 wei of DAI (6.9e-14 DAI) against 10.906686 USDT. Read
+// on-chain via getReserves() at that block. getEthPriceInUSD reserve-weights
+// across stable pairs, but with a single pair the weight is 1 no matter how small
+// the pair is, so DAI was priced at 10.906686 / 6.9e-14 = about $1.58e14. Every
+// DAI-side swap that day was multiplied by that, which is where the
+// totalVolumeUSD of 2.64e18 comes from (2,639,959,308,780,691,536 of it on that
+// one day).
+//
+// 1. A stable pair only contributes to the reference price if its DAI side holds
+//    at least this much DAI. Both live pairs hold over 1M DAI today.
+export const MINIMUM_STABLE_PAIR_REFERENCE_RESERVE = BigDecimal.fromString('10000')
+// 2. A pair's quoted price is ignored unless it is within this fraction of 1.
+//    DAI vs USDT/USDC should never be outside 0.5 to 1.5; outside that, the pair is
+//    broken or being manipulated, not informative. Set to '0' to disable.
+export const MAX_REFERENCE_PRICE_DEVIATION = BigDecimal.fromString('0.5')
+// 3. What to use when no stable pair passes 1 and 2. The reference token is DAI,
+//    a dollar stablecoin, so its peg is the right fallback. On a chain whose
+//    reference token is a volatile wrapped native this must be '0' (unpriced),
+//    never '1'.
+export const REFERENCE_PRICE_FALLBACK = BigDecimal.fromString('1')
+
 export class TokenDefinition {
   address: Address
   symbol: string

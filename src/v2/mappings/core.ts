@@ -29,7 +29,16 @@ function isCompleteMint(mintId: Bytes): boolean {
 
 export function handleTransfer(event: Transfer): void {
   // ignore initial transfers for first adds
+  // The 1,000 wei MINIMUM_LIQUIDITY minted to the zero address is still part of the pair's
+  // on-chain totalSupply(), so count it there, but do not create a Mint for it. Upstream
+  // returned without counting it, leaving Pair.totalSupply 1,000 wei below totalSupply()
+  // on every pair (visible on 6-/9-decimal pairs such as RM/USDT, whose LP supply is ~1e14 wei).
   if (event.params.to.toHexString() == ADDRESS_ZERO && event.params.value.equals(BigInt.fromI32(1000))) {
+    let initialPair = Pair.load(event.address)
+    if (initialPair) {
+      initialPair.totalSupply = initialPair.totalSupply.plus(convertTokenToDecimal(event.params.value, BI_18))
+      initialPair.save()
+    }
     return
   }
 

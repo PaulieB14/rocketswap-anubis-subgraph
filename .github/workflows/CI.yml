@@ -37,6 +37,12 @@ jobs:
       # codegen runs before each build on purpose: generated/ is rewritten per target,
       # so building v2 straight after a v2-tokens codegen fails with missing
       # Mint/Burn/Swap exports.
+      # src/common/chain.ts is gitignored and is normally copied from config/<network>/ by
+      # script/build.ts. CI calls graph directly, so it has to copy it itself; without this
+      # step every build fails on the missing ./chain import (the reason CI on main is red).
+      - name: Select Anubis chain constants
+        run: cp config/anubis/chain.ts src/common/chain.ts
+
       - name: Build v2
         run: |
           npx mustache config/anubis/config.json v2-subgraph.template.yaml > v2-subgraph.yaml

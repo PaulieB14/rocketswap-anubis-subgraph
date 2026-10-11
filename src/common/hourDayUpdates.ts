@@ -33,6 +33,12 @@ export function updateUniswapDayData(event: ethereum.Event): UniswapDayData {
 
   uniswapDayData.totalLiquidityUSD = uniswap.totalLiquidityUSD
   uniswapDayData.totalLiquidityETH = uniswap.totalLiquidityETH
+  // These were initialised to 0 and never written, so every UniswapDayData returned
+  // totalVolumeUSD: 0. Snapshot the factory's running totals like the liquidity fields above.
+  uniswapDayData.totalVolumeUSD = uniswap.totalVolumeUSD
+  uniswapDayData.totalVolumeETH = uniswap.totalVolumeETH
+  // NB: txCount is the factory's cumulative count at the last event of the day, not a daily
+  // count (upstream semantics, kept for compatibility).
   uniswapDayData.txCount = uniswap.txCount
   uniswapDayData.save()
 
